@@ -17,6 +17,8 @@
       --muted: rgba(255, 255, 255, 0.68);
       --soft: rgba(255, 255, 255, 0.48);
       --danger: #ffb4b4;
+      --ok: #7dffa8;
+      --warn: #ffd27d;
     }
 
     * {
@@ -40,6 +42,14 @@
       display: grid;
       place-items: center;
       padding: 22px;
+    }
+
+    body.staged {
+      overflow: hidden;
+    }
+
+    body.staged main {
+      visibility: hidden;
     }
 
     main {
@@ -89,6 +99,52 @@
       color: #ffffff;
     }
 
+    .modes {
+      display: grid;
+      gap: 8px;
+      margin: 16px 0 4px;
+      padding: 0;
+      border: 0;
+    }
+
+    .modes legend {
+      padding: 0;
+      margin-bottom: 8px;
+    }
+
+    .mode {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      cursor: pointer;
+    }
+
+    .mode:has(input:checked) {
+      background: var(--panel-2);
+      border-color: rgba(255, 255, 255, 0.42);
+    }
+
+    .mode input {
+      margin: 3px 0 0;
+      accent-color: #ffffff;
+    }
+
+    .mode b {
+      display: block;
+      font-size: 14px;
+      margin-bottom: 3px;
+    }
+
+    .mode span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
     .actions {
       display: flex;
       flex-wrap: wrap;
@@ -108,6 +164,7 @@
       background: #ffffff;
       color: #111111;
       font-size: 14px;
+      font-family: inherit;
     }
 
     button.secondary,
@@ -143,16 +200,125 @@
       font-size: 13px;
       word-break: break-word;
       margin-top: 12px;
+      white-space: pre-line;
     }
 
     #status.error {
       color: var(--danger);
     }
 
+    #facts {
+      margin-top: 10px;
+      display: grid;
+      gap: 2px;
+    }
+
     .small {
       color: var(--soft);
       font-size: 12px;
       line-height: 1.5;
+    }
+
+    .good {
+      color: var(--ok);
+    }
+
+    .warn {
+      color: var(--warn);
+    }
+
+    /* The running build. Light canvas so an unstyled build looks the way it does on ordinals.com. */
+    #stage {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      border: 0;
+      background: #ffffff;
+      color-scheme: light;
+      z-index: 2147483000;
+    }
+
+    /* Small launcher handle that sits over the running build. */
+    #hud {
+      position: fixed;
+      right: 10px;
+      bottom: 10px;
+      z-index: 2147483600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px;
+      border-radius: 999px;
+      background: rgba(12, 12, 12, 0.86);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+      font-size: 12px;
+      opacity: 0.4;
+      transition: opacity 0.15s ease;
+      backdrop-filter: blur(8px);
+    }
+
+    #hud[hidden] {
+      display: none;
+    }
+
+    #hud:hover,
+    #hud:focus-within,
+    #hud.open {
+      opacity: 1;
+    }
+
+    #hud-dot {
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border-radius: 50%;
+      background: transparent;
+      display: grid;
+      place-items: center;
+    }
+
+    #hud-dot::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--warn);
+    }
+
+    #hud[data-state="ok"] #hud-dot::before {
+      background: var(--ok);
+    }
+
+    #hud[data-state="error"] #hud-dot::before {
+      background: var(--danger);
+    }
+
+    #hud-body {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding-right: 4px;
+    }
+
+    #hud:hover #hud-body,
+    #hud:focus-within #hud-body,
+    #hud.open #hud-body {
+      display: flex;
+    }
+
+    #hud-label {
+      padding: 0 6px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    #hud-body button {
+      width: auto;
+      padding: 6px 10px;
+      font-size: 12px;
+      white-space: nowrap;
     }
 
     @media (max-width: 740px) {
@@ -165,10 +331,14 @@
         border-radius: 20px;
       }
 
-      button,
-      a.button {
+      .actions button,
+      .actions a.button {
         width: 100%;
         text-align: center;
+      }
+
+      #hud-label {
+        display: none;
       }
     }
   </style>
@@ -177,47 +347,64 @@
 <body>
   <main>
     <section class="card">
-      <div class="eyebrow">GitHub Pages iframe bridge</div>
+      <div class="eyebrow">GitHub Pages → ordinals.com</div>
 
       <h1>Ordinal Build Launcher</h1>
 
       <p>
-        This page automatically checks for <code>/build/index.html</code>.
-        If it exists, it launches it in a visible iframe on this page so the
-        parent window can handle wallet calls.
+        Loads <code>/build/index.html</code> and runs it on <code>ordinals.com</code>,
+        so recursion, the content security policy and the wallet behave the way they
+        will once the build is inscribed.
       </p>
 
-      <p>
-        The iframe gets injected wallet-compatible providers that post wallet
-        requests to this parent page. The direct Ordinals fallback points at sat
-        <code>534764996737666</code> and does not use this bridge.
-      </p>
+      <fieldset class="modes" id="modes">
+        <legend class="small">Where to run the build</legend>
+
+        <label class="mode">
+          <input type="radio" name="mode" value="frame" />
+          <span>
+            <b>ordinals.com frame</b>
+            Real ordinals.com origin and CSP, inside this page. Wallet calls are passed
+            straight through to the wallet extension on this page. Loads automatically.
+          </span>
+        </label>
+
+        <label class="mode">
+          <input type="radio" name="mode" value="tab" />
+          <span>
+            <b>ordinals.com tab</b>
+            A real top-level ordinals.com page with the wallet injected natively,
+            exactly what an inscription gets. Loads automatically in this tab; the
+            Launch button opens it in a new one.
+          </span>
+        </label>
+
+        <label class="mode">
+          <input type="radio" name="mode" value="local" />
+          <span>
+            <b>Local preview</b>
+            Runs on this page with ordinals.com URLs and CSP emulated. Used
+            automatically when the receiver inscription cannot be loaded.
+          </span>
+        </label>
+      </fieldset>
 
       <div class="actions">
-        <button id="launch">Launch build now</button>
-        <button id="launch-iframe" class="secondary">Launch iframe bridge</button>
+        <button id="launch">Launch build</button>
         <button id="check" class="secondary">Check build</button>
-        <button id="clear-name" class="secondary">Clear window.name</button>
-        <a
-          class="button secondary"
-          href="https://ordinals.com/r/sat/534764996737666/at/-1/content"
-          target="_blank"
-          rel="noopener"
-        >
-          Open receiver
-        </a>
-        <a class="button secondary" href="./xverse-iframe-probe.html" target="_blank" rel="noopener">
-          Xverse iframe probe
-        </a>
+        <a id="open-receiver" class="button secondary" target="_blank" rel="noopener">Open receiver</a>
       </div>
 
-      <div id="status">Checking for /build/index.html...</div>
+      <div id="status" role="status">Checking for /build/index.html...</div>
+
+      <div id="facts" class="small">
+        <div id="wallet-line"></div>
+        <div id="receiver-line"></div>
+      </div>
     </section>
 
     <section class="card">
-      <p>
-        Quick paste test
-      </p>
+      <p>Quick paste test</p>
 
       <textarea
         id="manual-html"
@@ -225,57 +412,132 @@
       ></textarea>
 
       <div class="actions">
-        <button id="launch-manual" class="secondary">Launch pasted to Ordinals</button>
-        <button id="launch-manual-iframe" class="secondary">Launch pasted iframe bridge</button>
+        <button id="launch-manual" class="secondary">Launch pasted HTML</button>
       </div>
 
-      <p class="small">
-        Normal use: replace <code>/build/index.html</code> with the app you want to test.
-        If that file exists, this launcher will auto-load it.
+      <p class="small" style="margin-top: 12px">
+        Normal use: replace <code>/build/index.html</code> with the app you want to test and
+        reload. Add <code>?manual</code> to this page's address to stop it launching
+        automatically, or <code>?mode=frame</code>, <code>?mode=tab</code> or
+        <code>?mode=local</code> to pick where it runs.
       </p>
     </section>
   </main>
 
+  <div id="hud" hidden data-state="wait">
+    <button id="hud-dot" title="Launcher controls" aria-label="Launcher controls"></button>
+    <div id="hud-body">
+      <span id="hud-label"></span>
+      <button class="secondary" data-act="reload">Reload build</button>
+      <button class="secondary" data-act="tab">Open as tab</button>
+      <button class="secondary" data-act="close">Close</button>
+    </div>
+  </div>
+
   <script>
     (function () {
+      "use strict";
+
+      /* ================================================================
+         CONFIG
+         ================================================================ */
+
       var ORDINALS_ORIGIN = "https://ordinals.com";
-      var RECEIVER_URL = "https://ordinals.com/r/sat/534764996737666/at/-1/content";
-      var BUILD_ENTRY = "./build/index.html";
-      var WALLET_BRIDGE_REQUEST_TYPE = "ordinal-parent-wallet-request";
-      var WALLET_BRIDGE_RESPONSE_TYPE = "ordinal-parent-wallet-response";
-      var WALLET_BRIDGE_EVENT_TYPE = "ordinal-parent-wallet-event";
-      var WALLET_GLOBALS = [
-        "BitcoinProvider",
-        "XverseProviders",
-        "btc_providers",
-        "unisat",
-        "LeatherProvider",
-        "HiroWalletProvider",
-        "okxwallet",
-        "phantom",
-        "magicEden",
-        "bitmapWallet",
-        "oyl",
-        "wizz"
-      ];
 
       /*
-        true = automatically launch /build/index.html if it exists.
+        The sat that carries your receiver inscription. The launcher always
+        asks for the latest inscription on it (/at/-1).
       */
+      var RECEIVER_SAT = "25483050759410";
+      var RECEIVER_URL = ORDINALS_ORIGIN + "/r/sat/" + RECEIVER_SAT + "/at/-1/content";
+
+      var BUILD_ENTRY = "./build/index.html";
+
+      /* "frame" | "tab" | "local". The choice made on the page is remembered. */
+      var DEFAULT_MODE = "frame";
+
+      /* true = launch /build/index.html as soon as the page loads, if it exists. */
       var AUTO_LAUNCH_IF_BUILD_EXISTS = true;
 
+      /* Local preview only: apply the same content security policy ordinals.com sends. */
+      var LOCAL_EMULATES_ORD_CSP = true;
+
+      /* Frame mode: if the receiver never renders the build, drop to local preview. */
+      var FALL_BACK_TO_LOCAL = true;
+      var RECEIVER_LOAD_TIMEOUT_MS = 25000;
+      var RECEIVER_RENDER_TIMEOUT_MS = 6000;
+
+      /*
+        Globals that wallet extensions inject. Each one found on this page is
+        mirrored into the framed build. Add a name here to bridge another wallet.
+      */
+      var WALLET_ROOTS = [
+        "XverseProviders",
+        "BitcoinProvider",
+        "StacksProvider",
+        "unisat",
+        "okxwallet",
+        "LeatherProvider",
+        "HiroWalletProvider",
+        "phantom",
+        "magicEden",
+        "wizz",
+        "oyl",
+        "bitmapWallet"
+      ];
+
+      var WALLET_LABELS = {
+        XverseProviders: "Xverse",
+        unisat: "UniSat",
+        okxwallet: "OKX",
+        LeatherProvider: "Leather",
+        phantom: "Phantom",
+        magicEden: "Magic Eden",
+        wizz: "Wizz",
+        oyl: "Oyl",
+        bitmapWallet: "Bitmap Wallet"
+      };
+
+      /* ================================================================
+         CONSTANTS AND ELEMENTS
+         ================================================================ */
+
+      var PAYLOAD_TYPE = "ordinal-window-name-render";
+      var RECEIVER_READY_TYPE = "ordinal-receiver-ready";
+      var RECEIVER_V2_MARKER = "ordinal-receiver/2";
+      var BRIDGE_TAG = "ordinal-wallet-bridge/2";
+      var MODE_KEY = "ordinal-launcher-mode";
+      var WALLET_SEEN_KEY = "ordinal-launcher-wallet-seen";
+      var HANDOFF_KEY = "ordinal-launcher-handoff";
+      var MAX_HASH_URL_LENGTH = 1900000;
+      var MODE_NAMES = {
+        frame: "ordinals.com frame",
+        tab: "ordinals.com tab",
+        local: "local preview"
+      };
+
       var launchBtn = document.getElementById("launch");
-      var launchIframeBtn = document.getElementById("launch-iframe");
       var checkBtn = document.getElementById("check");
-      var clearNameBtn = document.getElementById("clear-name");
       var launchManualBtn = document.getElementById("launch-manual");
-      var launchManualIframeBtn = document.getElementById("launch-manual-iframe");
       var manualHtml = document.getElementById("manual-html");
       var statusEl = document.getElementById("status");
-      var relayFrame = null;
-      var relayFrameObjectUrl = null;
-      var WALLET_CALL_TIMEOUT_MS = 115000;
-      var walletBridgeEventSubscriptions = [];
+      var walletLine = document.getElementById("wallet-line");
+      var receiverLine = document.getElementById("receiver-line");
+      var openReceiverLink = document.getElementById("open-receiver");
+      var modeInputs = document.querySelectorAll('input[name="mode"]');
+      var hud = document.getElementById("hud");
+      var hudDot = document.getElementById("hud-dot");
+      var hudLabel = document.getElementById("hud-label");
+
+      var sessions = {};             /* every running build, by its token (frame, local and tabs) */
+      var session = null;            /* the one shown in the frame on this page */
+      var receiverInfo = { state: "unknown" };
+      var receiverProbe = null;
+      var lastWalletSignature = null;
+
+      /* ================================================================
+         SMALL HELPERS
+         ================================================================ */
 
       function setStatus(message, isError) {
         statusEl.textContent = message;
@@ -284,10 +546,8 @@
 
       function setBusy(isBusy) {
         launchBtn.disabled = isBusy;
-        launchIframeBtn.disabled = isBusy;
         checkBtn.disabled = isBusy;
         launchManualBtn.disabled = isBusy;
-        launchManualIframeBtn.disabled = isBusy;
       }
 
       function bytes(text) {
@@ -300,30 +560,281 @@
         return u.href;
       }
 
-      function rewriteOrdinalRootUrls(text) {
-        return String(text || "").replace(
-          /(["'`(=]\s*)(\/(?:r\/|content\/|blockheight(?=[/?#]|$)|blockhash(?=[/?#]|$)|blocktime(?=[/?#]|$)))/g,
-          function (_match, prefix, pathStart) {
-            return prefix + ORDINALS_ORIGIN + pathStart;
-          }
-        );
-      }
-
-      function ordinalBaseTag() {
-        return '<base href="' + ORDINALS_ORIGIN + '/">';
-      }
-
       function getBuildUrl() {
         return new URL(BUILD_ENTRY, window.location.href).href;
       }
 
-      function hasWalletGlobal() {
-        for (var i = 0; i < WALLET_GLOBALS.length; i += 1) {
+      function safeGet(object, key) {
+        try {
+          return object[key];
+        } catch (error) {
+          return undefined;
+        }
+      }
+
+      function remember(key, value) {
+        try {
+          window.localStorage.setItem(key, value);
+        } catch (error) {}
+      }
+
+      function recall(key) {
+        try {
+          return window.localStorage.getItem(key);
+        } catch (error) {
+          return null;
+        }
+      }
+
+      function makeToken() {
+        if (window.crypto && typeof window.crypto.randomUUID === "function") {
+          return window.crypto.randomUUID();
+        }
+
+        return String(Date.now()) + "-" + Math.random().toString(36).slice(2);
+      }
+
+      function launcherOrigin() {
+        var origin = window.location.origin;
+        return /^https?:\/\//.test(origin) ? origin : "*";
+      }
+
+      /*
+        JSON that is safe inside an inline <script>: no closing tag or comment
+        opener can appear in it, and it stays a valid JavaScript literal.
+      */
+      function inlineJson(value) {
+        return JSON.stringify(value)
+          .replace(/<(\/|!)/g, "<\\$1")
+          .replace(/[\u2028\u2029]/g, function (ch) {
+            return ch.charCodeAt(0) === 0x2028 ? "\\u2028" : "\\u2029";
+          });
+      }
+
+      /* ================================================================
+         MODE
+         ================================================================ */
+
+      function isMode(value) {
+        return value === "frame" || value === "tab" || value === "local";
+      }
+
+      function initialMode() {
+        var fromUrl = new URLSearchParams(window.location.search).get("mode");
+
+        if (isMode(fromUrl)) {
+          return fromUrl;
+        }
+
+        var saved = recall(MODE_KEY);
+        return isMode(saved) ? saved : DEFAULT_MODE;
+      }
+
+      function currentMode() {
+        for (var i = 0; i < modeInputs.length; i += 1) {
+          if (modeInputs[i].checked) {
+            return modeInputs[i].value;
+          }
+        }
+
+        return DEFAULT_MODE;
+      }
+
+      function selectMode(mode) {
+        for (var i = 0; i < modeInputs.length; i += 1) {
+          modeInputs[i].checked = modeInputs[i].value === mode;
+        }
+      }
+
+      /* ================================================================
+         WALLETS ON THIS PAGE
+         The launcher is a normal top-level page, so wallet extensions
+         inject here. Everything below describes what they injected so the
+         framed build can be given the same objects.
+         ================================================================ */
+
+      var descriptionCache = new WeakMap();
+
+      function describeObject(object, refresh) {
+        var cached = descriptionCache.get(object);
+
+        if (cached && !refresh) {
+          return cached;
+        }
+
+        var methods = [];
+        var props = {};
+        var seen = {};
+        var current = object;
+        var depth = 0;
+
+        while (current && current !== Object.prototype && current !== Function.prototype && depth < 8) {
+          var names = [];
+
           try {
-            if (window[WALLET_GLOBALS[i]] !== undefined) {
-              return true;
-            }
+            names = Object.getOwnPropertyNames(current);
           } catch (error) {}
+
+          for (var i = 0; i < names.length; i += 1) {
+            var name = names[i];
+
+            if (seen[name] || name === "constructor") {
+              continue;
+            }
+
+            seen[name] = true;
+
+            var value = safeGet(object, name);
+            var type = typeof value;
+
+            if (type === "function") {
+              methods.push(name);
+            } else if (value === null || type === "boolean" || type === "number" || (type === "string" && value.length < 200000)) {
+              props[name] = value;
+            }
+          }
+
+          try {
+            current = Object.getPrototypeOf(current);
+          } catch (error) {
+            break;
+          }
+
+          depth += 1;
+        }
+
+        var description = { methods: methods, props: props };
+        descriptionCache.set(object, description);
+        return description;
+      }
+
+      function snapshotBtcProviders() {
+        var list = safeGet(window, "btc_providers");
+        var out = [];
+
+        if (!Array.isArray(list)) {
+          return out;
+        }
+
+        list.forEach(function (entry) {
+          if (!entry || typeof entry !== "object") {
+            return;
+          }
+
+          var copy = {};
+
+          Object.keys(entry).forEach(function (key) {
+            var value = entry[key];
+            var type = typeof value;
+
+            if (value === null || type === "string" || type === "number" || type === "boolean") {
+              copy[key] = value;
+            } else if (Array.isArray(value) && value.every(function (item) { return typeof item === "string"; })) {
+              copy[key] = value.slice();
+            }
+          });
+
+          if (copy.id) {
+            out.push(copy);
+          }
+        });
+
+        return out;
+      }
+
+      function scanWallets() {
+        var providers = [];
+        var labels = [];
+        var firstPath = new Map();
+
+        function add(path, object) {
+          var known = firstPath.get(object);
+
+          if (known) {
+            providers.push({ path: path, alias: known });
+            return false;
+          }
+
+          firstPath.set(object, path);
+
+          var description = describeObject(object);
+          providers.push({ path: path, methods: description.methods, props: description.props });
+          return true;
+        }
+
+        WALLET_ROOTS.forEach(function (root) {
+          var value = safeGet(window, root);
+
+          if (!value || typeof value !== "object") {
+            return;
+          }
+
+          if (WALLET_LABELS[root]) {
+            labels.push(WALLET_LABELS[root]);
+          }
+
+          if (!add(root, value)) {
+            return;
+          }
+
+          var names = [];
+          var count = 0;
+
+          try {
+            names = Object.getOwnPropertyNames(value);
+          } catch (error) {}
+
+          names.forEach(function (key) {
+            if (count >= 16 || key.charAt(0) === "_") {
+              return;
+            }
+
+            var child = safeGet(value, key);
+
+            if (!child || typeof child !== "object" || child === value || child === window || Array.isArray(child)) {
+              return;
+            }
+
+            if (typeof Node !== "undefined" && child instanceof Node) {
+              return;
+            }
+
+            if (!describeObject(child).methods.length) {
+              return;
+            }
+
+            count += 1;
+            add(root + "." + key, child);
+          });
+        });
+
+        if (!labels.length && providers.length) {
+          labels.push("Bitcoin wallet");
+        }
+
+        var btcProviders = snapshotBtcProviders();
+
+        return {
+          providers: providers,
+          btcProviders: btcProviders,
+          labels: labels,
+          signature: providers.map(function (p) {
+            return p.path + ":" + (p.alias || p.methods.join(","));
+          }).join("|") + "#" + btcProviders.map(function (p) { return p.id; }).join(",")
+        };
+      }
+
+      function walletSnapshotForChild(scan) {
+        return { providers: scan.providers, btcProviders: scan.btcProviders };
+      }
+
+      function hasWallet() {
+        for (var i = 0; i < WALLET_ROOTS.length; i += 1) {
+          var value = safeGet(window, WALLET_ROOTS[i]);
+
+          if (value && typeof value === "object") {
+            return true;
+          }
         }
 
         return false;
@@ -334,7 +845,7 @@
 
         return new Promise(function (resolve) {
           function check() {
-            if (hasWalletGlobal() || Date.now() - started >= maxMs) {
+            if (hasWallet() || Date.now() - started >= maxMs) {
               resolve();
               return;
             }
@@ -346,347 +857,709 @@
         });
       }
 
-      function getXverseProvider() {
-        try {
-          var direct = window.XverseProviders && window.XverseProviders.BitcoinProvider;
+      /* Keeps the wallet line current and tells a running build about late arrivals. */
+      function refreshWallets() {
+        var scan = scanWallets();
 
-          if (direct && typeof direct.request === "function") {
-            return direct;
-          }
-
-          if (window.BitcoinProvider && typeof window.BitcoinProvider.request === "function") {
-            return window.BitcoinProvider;
-          }
-
-          if (Array.isArray(window.btc_providers)) {
-            for (var i = 0; i < window.btc_providers.length; i += 1) {
-              var entry = window.btc_providers[i];
-              var label = String((entry && (entry.name || entry.id || entry.label)) || "").toLowerCase();
-
-              if (label.indexOf("xverse") === -1) {
-                continue;
-              }
-
-              var provider =
-                (entry && typeof entry.request === "function" ? entry : null) ||
-                (entry && entry.provider && typeof entry.provider.request === "function" ? entry.provider : null) ||
-                (entry && entry.features && entry.features["sats-connect:"] && entry.features["sats-connect:"].provider && typeof entry.features["sats-connect:"].provider.request === "function" ? entry.features["sats-connect:"].provider : null);
-
-              if (provider) {
-                return provider;
-              }
-            }
-          }
-        } catch (error) {
-          console.warn("Xverse provider lookup failed", error);
+        if (scan.signature === lastWalletSignature) {
+          return;
         }
 
-        return null;
-      }
+        lastWalletSignature = scan.signature;
 
-      function getProviderFromBtcProviders(match) {
-        try {
-          if (!Array.isArray(window.btc_providers)) {
-            return null;
-          }
-
-          for (var i = 0; i < window.btc_providers.length; i += 1) {
-            var entry = window.btc_providers[i];
-            var label = String((entry && (entry.name || entry.id || entry.label)) || "").toLowerCase();
-
-            if (label.indexOf(match) === -1) {
-              continue;
-            }
-
-            if (entry && typeof entry.request === "function") {
-              return entry;
-            }
-
-            if (entry && entry.provider && typeof entry.provider.request === "function") {
-              return entry.provider;
-            }
-
-            if (entry && entry.features && entry.features["sats-connect:"] && entry.features["sats-connect:"].provider && typeof entry.features["sats-connect:"].provider.request === "function") {
-              return entry.features["sats-connect:"].provider;
-            }
-          }
-        } catch (error) {
-          console.warn("btc_providers lookup failed", error);
+        if (scan.labels.length) {
+          remember(WALLET_SEEN_KEY, "1");
+          walletLine.innerHTML = '<span class="good">●</span> Wallet on this page: ';
+          walletLine.appendChild(document.createTextNode(scan.labels.join(", ")));
+        } else {
+          walletLine.innerHTML = '<span class="warn">●</span> No wallet extension detected on this page yet. ' +
+            "Frame and local modes use the wallet injected here.";
         }
 
-        return null;
-      }
-
-      function getWalletProvider(walletId) {
-        var id = String(walletId || "xverse").toLowerCase();
-
-        try {
-          if (id === "xverse") {
-            return getXverseProvider();
-          }
-
-          if (id === "unisat") {
-            return window.unisat || null;
-          }
-
-          if (id === "okx") {
-            return window.okxwallet && window.okxwallet.bitcoin ? window.okxwallet.bitcoin : null;
-          }
-
-          if (id === "leather") {
-            return window.LeatherProvider || window.HiroWalletProvider || getProviderFromBtcProviders("leather");
-          }
-
-          if (id === "phantom") {
-            return window.phantom && window.phantom.bitcoin ? window.phantom.bitcoin : null;
-          }
-
-          if (id === "wizz") {
-            return window.wizz || null;
-          }
-
-          if (id === "oyl") {
-            return window.oyl || null;
-          }
-
-          if (id === "bitmapwallet") {
-            return window.bitmapWallet || null;
-          }
-
-          if (id === "magiceden") {
-            return window.magicEden || window.magiceden || null;
-          }
-        } catch (error) {
-          console.warn("Wallet provider lookup failed", walletId, error);
-        }
-
-        return null;
-      }
-
-      function getParentWalletAvailability() {
-        return {
-          xverse: true,
-          unisat: true,
-          okx: true,
-          leather: true,
-          phantom: true,
-          wizz: true,
-          oyl: true,
-          bitmapWallet: true,
-          magicEden: true
-        };
-      }
-
-      function withWalletTimeout(promise, label, timeoutMs) {
-        return new Promise(function (resolve, reject) {
-          var settled = false;
-          var timer = setTimeout(function () {
-            if (settled) {
-              return;
-            }
-
-            settled = true;
-            reject(new Error(label + " timed out after " + Math.round(timeoutMs / 1000) + "s. Check the Xverse popup or reload the page and try again."));
-          }, timeoutMs);
-
-          Promise.resolve(promise).then(function (value) {
-            if (settled) {
-              return;
-            }
-
-            settled = true;
-            clearTimeout(timer);
-            resolve(value);
-          }, function (error) {
-            if (settled) {
-              return;
-            }
-
-            settled = true;
-            clearTimeout(timer);
-            reject(error);
-          });
+        Object.keys(sessions).forEach(function (token) {
+          sendToChild(sessions[token], { kind: "wallets", wallets: walletSnapshotForChild(scan) });
         });
       }
 
-      function getBridgePostTargetOrigin(eventOrigin) {
-        return eventOrigin && eventOrigin !== "null" ? eventOrigin : "*";
+      function watchWallets() {
+        var started = Date.now();
+
+        (function tick() {
+          refreshWallets();
+          setTimeout(tick, Date.now() - started < 10000 ? 400 : 2500);
+        })();
       }
 
-      async function callSignMultipleTransactions(provider, requestLike) {
-        if (typeof provider.signMultipleTransactions !== "function") {
-          throw new Error("Xverse provider method not available: signMultipleTransactions");
+      /* ================================================================
+         WALLET BRIDGE
+         Both ends share makeBridgeCodec. It turns functions (event
+         callbacks, unsubscribe handles) into ids that the other side can
+         call, and carries Error objects across with their fields intact.
+         ================================================================ */
+
+      function makeBridgeCodec(sendInvoke) {
+        var FN = "__ordBridgeFn";
+        var ERR = "__ordBridgeErr";
+        var localFns = new Map();
+        var localIds = new WeakMap();
+        var remoteStubs = new Map();
+        var counter = 0;
+        var prefix = Math.random().toString(36).slice(2, 8) + ":";
+        var tagOf = Object.prototype.toString;
+        var hasOwn = Object.prototype.hasOwnProperty;
+        var PASS = {
+          "[object ArrayBuffer]": 1, "[object Date]": 1, "[object RegExp]": 1,
+          "[object Blob]": 1, "[object File]": 1, "[object Map]": 1, "[object Set]": 1
+        };
+
+        function idFor(fn) {
+          var id = localIds.get(fn);
+
+          if (!id) {
+            counter += 1;
+            id = prefix + counter;
+            localIds.set(fn, id);
+            localFns.set(id, fn);
+          }
+
+          return id;
         }
 
-        return await withWalletTimeout(new Promise(function (resolve, reject) {
-          var settled = false;
+        function isError(value) {
+          return tagOf.call(value) === "[object Error]" ||
+            (value && typeof value.message === "string" && typeof value.stack === "string");
+        }
 
-          function settle(fn, value) {
-            if (settled) {
+        function encodeErrorObject(error, depth, seen) {
+          var body = { name: error.name, message: error.message, stack: error.stack };
+
+          Object.keys(error).forEach(function (key) {
+            body[key] = encode(error[key], depth + 1, seen);
+          });
+
+          if (error.code !== undefined && body.code === undefined) {
+            body.code = encode(error.code, depth + 1, seen);
+          }
+
+          var out = {};
+          out[ERR] = body;
+          return out;
+        }
+
+        function encode(value, depth, seen) {
+          var type = typeof value;
+
+          if (type === "function") {
+            var ref = {};
+            ref[FN] = idFor(value);
+            return ref;
+          }
+
+          if (value === null || type !== "object") {
+            return type === "symbol" ? undefined : value;
+          }
+
+          if (depth > 16) {
+            return undefined;
+          }
+
+          if (ArrayBuffer.isView(value) || PASS[tagOf.call(value)]) {
+            return value;
+          }
+
+          if (seen.has(value)) {
+            return seen.get(value);
+          }
+
+          if (isError(value)) {
+            return encodeErrorObject(value, depth, seen);
+          }
+
+          if (Array.isArray(value)) {
+            var list = [];
+            seen.set(value, list);
+
+            for (var i = 0; i < value.length; i += 1) {
+              list.push(encode(value[i], depth + 1, seen));
+            }
+
+            return list;
+          }
+
+          var out = {};
+          seen.set(value, out);
+
+          try {
+            for (var key in value) {
+              if (hasOwn.call(value, key)) {
+                try {
+                  out[key] = encode(value[key], depth + 1, seen);
+                } catch (error) {}
+              }
+            }
+          } catch (error) {}
+
+          return out;
+        }
+
+        function stubFor(id) {
+          var stub = remoteStubs.get(id);
+
+          if (!stub) {
+            stub = function () {
+              var promise = sendInvoke(id, encode(Array.prototype.slice.call(arguments), 0, new Map()));
+              promise.catch(function () {});
+              return promise;
+            };
+
+            remoteStubs.set(id, stub);
+          }
+
+          return stub;
+        }
+
+        function decode(value, seen) {
+          if (value === null || typeof value !== "object") {
+            return value;
+          }
+
+          if (ArrayBuffer.isView(value) || PASS[tagOf.call(value)] || seen.has(value)) {
+            return value;
+          }
+
+          seen.add(value);
+
+          if (typeof value[FN] === "string") {
+            return stubFor(value[FN]);
+          }
+
+          if (value[ERR] && typeof value[ERR] === "object") {
+            var body = value[ERR];
+            var error = new Error(typeof body.message === "string" ? body.message : "Wallet error");
+
+            for (var field in body) {
+              if (hasOwn.call(body, field) && field !== "message") {
+                try {
+                  error[field] = decode(body[field], seen);
+                } catch (ignored) {}
+              }
+            }
+
+            return error;
+          }
+
+          if (Array.isArray(value)) {
+            for (var i = 0; i < value.length; i += 1) {
+              value[i] = decode(value[i], seen);
+            }
+
+            return value;
+          }
+
+          for (var key in value) {
+            if (hasOwn.call(value, key)) {
+              value[key] = decode(value[key], seen);
+            }
+          }
+
+          return value;
+        }
+
+        return {
+          encode: function (value) {
+            return encode(value, 0, new Map());
+          },
+          encodeError: function (error) {
+            return encode(error, 0, new Map());
+          },
+          decode: function (value) {
+            return decode(value, new WeakSet());
+          },
+          invokeLocal: function (id, encodedArgs) {
+            var fn = localFns.get(id);
+
+            if (!fn) {
+              throw new Error("That bridge callback is no longer available");
+            }
+
+            var args = decode(encodedArgs, new WeakSet());
+            return fn.apply(undefined, Array.isArray(args) ? args : []);
+          }
+        };
+      }
+
+      /*
+        Runs inside the build, before any of the build's own scripts.
+        It is serialised with toString(), so it must not reference anything
+        outside itself.
+      */
+      function bridgeShim(cfg, makeCodec) {
+        var ownScript = document.currentScript;
+
+        if (ownScript && ownScript.parentNode) {
+          ownScript.parentNode.removeChild(ownScript);
+        }
+
+        if (window.__ordinalWalletBridge) {
+          return;
+        }
+
+        var TAG = cfg.tag;
+        var SESSION = cfg.session;
+        var ORIGIN = cfg.launcherOrigin;
+        var launcher = null;
+        var pending = {};
+        var seq = 0;
+        var proxies = {};
+        var globals = {};
+        var SUBSCRIBE = { on: 1, once: 1, addListener: 1, addEventListener: 1, prependListener: 1 };
+        var UNSUBSCRIBE = { off: 1, removeListener: 1, removeEventListener: 1, removeAllListeners: 1 };
+
+        function post(message) {
+          message.bridge = TAG;
+          message.session = SESSION;
+
+          if (launcher) {
+            try {
+              launcher.postMessage(message, ORIGIN);
+              return;
+            } catch (error) {}
+          }
+
+          var targets = [];
+          var current = window;
+
+          while (current.parent && current.parent !== current) {
+            current = current.parent;
+            targets.push(current);
+          }
+
+          if (!targets.length && window.opener) {
+            targets.push(window.opener);
+          }
+
+          targets.forEach(function (target) {
+            try {
+              target.postMessage(message, ORIGIN);
+            } catch (error) {}
+          });
+        }
+
+        function rpc(kind, fields) {
+          return new Promise(function (resolve, reject) {
+            seq += 1;
+            var id = "c" + seq;
+            pending[id] = { resolve: resolve, reject: reject };
+            fields.kind = kind;
+            fields.id = id;
+            post(fields);
+          });
+        }
+
+        var codec = makeCodec(function (fnId, encodedArgs) {
+          return rpc("invoke", { fn: fnId, args: encodedArgs });
+        });
+
+        function makeMethod(path, name, proxy, returnsUnsubscribe) {
+          return function () {
+            var args = Array.prototype.slice.call(arguments);
+            var promise = rpc("call", { path: path, method: name, args: codec.encode(args) });
+
+            if (SUBSCRIBE[name]) {
+              promise.catch(function (error) {
+                console.warn("[ordinal wallet bridge] " + path + "." + name + " failed", error);
+              });
+
+              /* Xverse/sats-connect: addListener({ eventName, cb }) returns a remove function. */
+              if (name === "addListener" && (returnsUnsubscribe || (args[0] && typeof args[0] === "object"))) {
+                return function removeListener() {
+                  promise.then(function (remove) {
+                    if (typeof remove === "function") {
+                      remove();
+                    }
+                  }).catch(function () {});
+                };
+              }
+
+              return proxy;
+            }
+
+            if (UNSUBSCRIBE[name]) {
+              promise.catch(function () {});
+              return proxy;
+            }
+
+            return promise;
+          };
+        }
+
+        function buildProxy(description) {
+          var path = description.path;
+          var proxy = proxies[path] || (proxies[path] = {});
+          var xverse = /^XverseProviders\./.test(path) || path === "BitcoinProvider";
+
+          Object.keys(description.props || {}).forEach(function (key) {
+            try {
+              proxy[key] = description.props[key];
+            } catch (error) {}
+          });
+
+          (description.methods || []).forEach(function (name) {
+            if (typeof proxy[name] !== "function") {
+              proxy[name] = makeMethod(path, name, proxy, xverse);
+            }
+          });
+
+          try {
+            Object.defineProperty(proxy, "isOrdinalParentBridge", { value: true, configurable: true });
+          } catch (error) {}
+
+          return proxy;
+        }
+
+        function defineGlobal(name, value) {
+          globals[name] = value;
+
+          try {
+            var existing = Object.getOwnPropertyDescriptor(window, name);
+
+            if (existing && !existing.configurable) {
               return;
             }
 
-            settled = true;
-            fn(value);
-          }
-
-          var request = requestLike && requestLike.payload !== undefined
-            ? {
-                payload: requestLike.payload,
-                onFinish: function (response) { settle(resolve, response); },
-                onCancel: function () { settle(reject, new Error("User rejected the batch signing request")); }
+            Object.defineProperty(window, name, {
+              configurable: true,
+              enumerable: true,
+              get: function () {
+                return globals[name];
+              },
+              set: function () {
+                /* Keep the bridged provider: it talks to the wallet that is known to work. */
               }
-            : requestLike;
-
-          try {
-            var maybePromise = provider.signMultipleTransactions(request);
-
-            if (maybePromise && typeof maybePromise.then === "function") {
-              maybePromise.then(function (response) {
-                if (response !== undefined) {
-                  settle(resolve, response);
-                }
-              }, function (error) {
-                settle(reject, error);
-              });
-            } else if (maybePromise !== undefined) {
-              settle(resolve, maybePromise);
-            }
+            });
           } catch (error) {
-            settle(reject, error);
+            try {
+              window[name] = value;
+            } catch (ignored) {}
           }
-        }), "Xverse signMultipleTransactions()", WALLET_CALL_TIMEOUT_MS);
-      }
-
-      async function subscribeWalletProviderEvent(eventSource, eventOrigin, eventName, walletId) {
-        await waitForWalletInjection(2500);
-
-        var provider = getWalletProvider(walletId || "xverse");
-
-        if (!provider) {
-          throw new Error(String(walletId || "Xverse") + " provider not found in parent window");
         }
 
-        var subscribe = typeof provider.on === "function" ? provider.on.bind(provider)
-          : typeof provider.addListener === "function" ? provider.addListener.bind(provider)
-          : null;
-
-        if (!subscribe) {
-          return false;
-        }
-
-        var handler = function () {
-          if (!eventSource || typeof eventSource.postMessage !== "function") {
+        function applyWallets(snapshot) {
+          if (!snapshot) {
             return;
           }
 
-          eventSource.postMessage({
-            type: WALLET_BRIDGE_EVENT_TYPE,
-            walletId: walletId || "xverse",
-            eventName: eventName,
-            args: Array.prototype.slice.call(arguments)
-          }, getBridgePostTargetOrigin(eventOrigin));
-        };
+          (snapshot.providers || []).forEach(function (description) {
+            var proxy;
 
-        subscribe(eventName, handler);
-        walletBridgeEventSubscriptions.push({
-          source: eventSource,
-          walletId: walletId || "xverse",
-          eventName: eventName,
-          handler: handler,
-          provider: provider
-        });
+            if (description.alias) {
+              proxy = proxies[description.alias];
 
-        return true;
-      }
+              if (!proxy) {
+                return;
+              }
 
-      async function unsubscribeWalletProviderEvent(eventSource, eventName, walletId) {
-        var kept = [];
-        var removed = false;
+              proxies[description.path] = proxy;
+            } else {
+              proxy = buildProxy(description);
+            }
 
-        for (var i = 0; i < walletBridgeEventSubscriptions.length; i += 1) {
-          var slot = walletBridgeEventSubscriptions[i];
+            var parts = description.path.split(".");
 
-          if (slot.source === eventSource && slot.eventName === eventName && slot.walletId === (walletId || "xverse")) {
-            removed = true;
+            if (parts.length === 1) {
+              defineGlobal(parts[0], proxy);
+            } else {
+              var owner = proxies[parts.slice(0, -1).join(".")];
+
+              if (owner) {
+                owner[parts[parts.length - 1]] = proxy;
+              }
+            }
+          });
+
+          var entries = snapshot.btcProviders || [];
+
+          if (entries.length) {
+            if (!Array.isArray(window.btc_providers)) {
+              window.btc_providers = [];
+            }
+
+            entries.forEach(function (entry) {
+              var exists = window.btc_providers.some(function (item) {
+                return item && item.id === entry.id;
+              });
+
+              if (!exists) {
+                window.btc_providers.push(entry);
+              }
+            });
+          }
+        }
+
+        window.addEventListener("message", function (event) {
+          var data = event.data;
+
+          if (!data || data.bridge !== TAG || data.session !== SESSION) {
+            return;
+          }
+
+          if (ORIGIN !== "*" && event.origin !== ORIGIN) {
+            return;
+          }
+
+          if (event.source) {
+            launcher = event.source;
+          }
+
+          if (data.kind === "result") {
+            var slot = pending[data.id];
+
+            if (!slot) {
+              return;
+            }
+
+            delete pending[data.id];
+
+            if (data.ok) {
+              slot.resolve(codec.decode(data.value));
+            } else {
+              slot.reject(codec.decode(data.error));
+            }
+          } else if (data.kind === "invoke") {
+            var outcome;
 
             try {
-              if (slot.provider && typeof slot.provider.off === "function") {
-                slot.provider.off(slot.eventName, slot.handler);
-              } else if (slot.provider && typeof slot.provider.removeListener === "function") {
-                slot.provider.removeListener(slot.eventName, slot.handler);
-              }
+              outcome = Promise.resolve(codec.invokeLocal(data.fn, data.args));
             } catch (error) {
-              console.warn("Xverse event unsubscribe failed", error);
+              outcome = Promise.reject(error);
             }
+
+            outcome.then(function (value) {
+              post({ kind: "result", id: data.id, ok: true, value: codec.encode(value) });
+            }, function (error) {
+              post({ kind: "result", id: data.id, ok: false, error: codec.encodeError(error) });
+            });
+          } else if (data.kind === "welcome" || data.kind === "wallets") {
+            applyWallets(data.wallets);
+          }
+        });
+
+        applyWallets(cfg.wallets);
+
+        window.__ordinalWalletBridge = {
+          version: 2,
+          mode: cfg.mode,
+          wallets: function () {
+            return Object.keys(globals);
+          }
+        };
+
+        post({ kind: "hello" });
+      }
+
+      function bridgeScriptTag(s) {
+        var cfg = {
+          tag: BRIDGE_TAG,
+          session: s.token,
+          launcherOrigin: launcherOrigin(),
+          mode: s.mode,
+          wallets: walletSnapshotForChild(scanWallets())
+        };
+
+        return "<script>(" + bridgeShim.toString() + ")(" + inlineJson(cfg) + "," + makeBridgeCodec.toString() + ");<\/script>";
+      }
+
+      /* ---------- launcher side of the bridge ---------- */
+
+      function sendToChild(s, message) {
+        if (!s.child || s.closed) {
+          return;
+        }
+
+        var targetOrigin = s.childOrigin && s.childOrigin !== "null" ? s.childOrigin : "*";
+
+        message.bridge = BRIDGE_TAG;
+        message.session = s.token;
+
+        try {
+          s.child.postMessage(message, targetOrigin);
+        } catch (cloneError) {
+          /* Something in a wallet response could not be cloned. Fall back to plain JSON. */
+          try {
+            s.child.postMessage(JSON.parse(JSON.stringify(message)), targetOrigin);
+          } catch (jsonError) {
+            if (message.kind === "result") {
+              s.child.postMessage({
+                bridge: BRIDGE_TAG,
+                session: s.token,
+                kind: "result",
+                id: message.id,
+                ok: false,
+                error: s.codec.encodeError(new Error("The wallet response could not be passed to the build"))
+              }, targetOrigin);
+            }
+          }
+        }
+      }
+
+      function providerAt(path) {
+        var parts = String(path || "").split(".");
+
+        if (parts.length > 2 || WALLET_ROOTS.indexOf(parts[0]) === -1) {
+          return null;
+        }
+
+        var object = safeGet(window, parts[0]);
+
+        if (object && parts.length === 2) {
+          if (parts[1].charAt(0) === "_" || !Object.prototype.hasOwnProperty.call(object, parts[1])) {
+            return null;
+          }
+
+          object = safeGet(object, parts[1]);
+        }
+
+        return object && typeof object === "object" ? object : null;
+      }
+
+      function handleWalletCall(s, data) {
+        function reply(ok, value) {
+          var message = { kind: "result", id: data.id, ok: ok };
+
+          if (ok) {
+            message.value = s.codec.encode(value);
           } else {
-            kept.push(slot);
-          }
-        }
-
-        walletBridgeEventSubscriptions = kept;
-        return removed;
-      }
-
-      async function requestWalletProvider(method, params, callType, walletId) {
-        await waitForWalletInjection(2500);
-
-        var provider = getWalletProvider(walletId || "xverse");
-
-        if (!provider) {
-          throw new Error(String(walletId || "Xverse") + " provider not found in parent window");
-        }
-
-        if (callType === "method") {
-          if (typeof provider[method] !== "function") {
-            throw new Error(String(walletId || "Xverse") + " provider method not available: " + String(method));
+            message.error = s.codec.encodeError(value);
           }
 
-          var args = Array.isArray(params) ? params : (params === undefined ? [] : [params]);
-
-          if (method === "signMultipleTransactions") {
-            return await callSignMultipleTransactions(provider, args[0]);
-          }
-
-          return await withWalletTimeout(provider[method].apply(provider, args), String(walletId || "Xverse") + " " + String(method) + "()", WALLET_CALL_TIMEOUT_MS);
+          sendToChild(s, message);
         }
 
-        if (typeof provider.request !== "function") {
-          if (typeof provider[method] === "function") {
-            var methodArgs = Array.isArray(params) ? params : (params === undefined ? [] : [params]);
-            return await withWalletTimeout(provider[method].apply(provider, methodArgs), String(walletId || "wallet") + " " + String(method) + "()", WALLET_CALL_TIMEOUT_MS);
-          }
+        var target = providerAt(data.path);
+        var method = String(data.method);
 
-          throw new Error(String(walletId || "wallet") + " provider does not support request(" + String(method) + ")");
+        if (!target) {
+          reply(false, new Error("Wallet provider " + data.path + " is not available on the launcher page"));
+          return;
         }
 
-        var firstError = null;
+        var known = describeObject(target).methods.indexOf(method) !== -1 ||
+          describeObject(target, true).methods.indexOf(method) !== -1;
+
+        if (!known) {
+          reply(false, new TypeError(data.path + "." + method + " is not a function"));
+          return;
+        }
+
+        var result;
+
+        console.debug("[launcher] wallet call from build:", data.path + "." + method);
 
         try {
-          if (params === undefined) {
-            return await withWalletTimeout(provider.request(method), String(walletId || "wallet") + " request(" + String(method) + ")", WALLET_CALL_TIMEOUT_MS);
-          }
-
-          return await withWalletTimeout(provider.request(method, params), String(walletId || "wallet") + " request(" + String(method) + ")", WALLET_CALL_TIMEOUT_MS);
+          var args = s.codec.decode(data.args);
+          result = target[method].apply(target, Array.isArray(args) ? args : []);
         } catch (error) {
-          firstError = error;
+          reply(false, error);
+          return;
         }
 
-        try {
-          return await withWalletTimeout(provider.request(params === undefined ? { method: method } : { method: method, params: params }), String(walletId || "wallet") + " request(payload " + String(method) + ")", WALLET_CALL_TIMEOUT_MS);
-        } catch (error2) {
-          var message = error2 && error2.message ? error2.message : (firstError && firstError.message ? firstError.message : String(error2 || firstError));
-          throw new Error(message || "Xverse request failed");
+        Promise.resolve(result).then(function (value) {
+          reply(true, value);
+        }, function (error) {
+          reply(false, error);
+        });
+      }
+
+      function isBridgeOrigin(origin) {
+        return origin === ORDINALS_ORIGIN || origin === window.location.origin || origin === "null";
+      }
+
+      function handleMessage(event) {
+        var data = event.data;
+
+        if (!data || typeof data !== "object") {
+          return;
+        }
+
+        /* Upgraded receiver asking for the build (used when window.name did not arrive). */
+        if (data.type === RECEIVER_READY_TYPE) {
+          if (event.origin !== ORDINALS_ORIGIN) {
+            return;
+          }
+
+          Object.keys(sessions).forEach(function (token) {
+            var candidate = sessions[token];
+            var isSource = (candidate.frame && candidate.frame.contentWindow === event.source) || candidate.tab === event.source;
+
+            if (isSource && candidate.payload) {
+              event.source.postMessage(candidate.payload, ORDINALS_ORIGIN);
+            }
+          });
+
+          return;
+        }
+
+        var s = data.bridge === BRIDGE_TAG && typeof data.session === "string" ? sessions[data.session] : null;
+
+        if (!s || s.closed || !isBridgeOrigin(event.origin)) {
+          return;
+        }
+
+        s.child = event.source;
+        s.childOrigin = event.origin;
+
+        if (data.kind === "hello") {
+          s.helloSeen = true;
+          clearWatchdog(s);
+          sendToChild(s, { kind: "welcome", wallets: walletSnapshotForChild(scanWallets()) });
+
+          if (s === session) {
+            setHudState("ok");
+          } else if (s.mode === "tab") {
+            /* Only happens when the receiver reset the page after it loaded. */
+            setStatus(
+              "The build is running in the ordinals.com tab. The receiver there rebuilt the page after it had loaded " +
+              "(document.open), which cuts off a natively injected wallet, so that tab's wallet calls are going " +
+              "through the wallet on this page instead. Keep this page open. " +
+              "The upgraded receiver avoids this."
+            );
+          }
+        } else if (data.kind === "call") {
+          handleWalletCall(s, data);
+        } else if (data.kind === "invoke") {
+          var outcome;
+
+          try {
+            outcome = Promise.resolve(s.codec.invokeLocal(data.fn, data.args));
+          } catch (error) {
+            outcome = Promise.reject(error);
+          }
+
+          outcome.then(function (value) {
+            sendToChild(s, { kind: "result", id: data.id, ok: true, value: s.codec.encode(value) });
+          }, function (error) {
+            sendToChild(s, { kind: "result", id: data.id, ok: false, error: s.codec.encodeError(error) });
+          });
+        } else if (data.kind === "result") {
+          var slot = s.pending[data.id];
+
+          if (!slot) {
+            return;
+          }
+
+          delete s.pending[data.id];
+
+          if (data.ok) {
+            slot.resolve(s.codec.decode(data.value));
+          } else {
+            slot.reject(s.codec.decode(data.error));
+          }
         }
       }
 
-      function makeRelayId() {
-        if (window.crypto && typeof window.crypto.randomUUID === "function") {
-          return window.crypto.randomUUID();
-        }
-
-        return String(Date.now()) + "-" + Math.random().toString(36).slice(2);
-      }
+      /* ================================================================
+         BUILD HTML
+         ================================================================ */
 
       async function fetchBuildHtml(options) {
         var silent = options && options.silent;
@@ -716,93 +1589,77 @@
         };
       }
 
-      function makePayload(html, meta) {
-        return {
-          type: "ordinal-window-name-render",
-          version: "1.0.0",
-          relayId: meta && meta.relayId ? meta.relayId : makeRelayId(),
-          html: html,
-          source: window.location.href,
-          buildUrl: meta && meta.buildUrl ? meta.buildUrl : "manual-paste",
-          receiver: RECEIVER_URL,
-          createdAt: new Date().toISOString()
-        };
+      /* Things in the build that will not load on ordinals.com, inscribed or not. */
+      function findUnloadableReferences(html) {
+        var local = [];
+        var external = [];
+
+        try {
+          var doc = new DOMParser().parseFromString(html, "text/html");
+          var nodes = doc.querySelectorAll("script[src], link[href], img[src], source[src], video[src], audio[src], iframe[src]");
+
+          Array.prototype.forEach.call(nodes, function (node) {
+            var url = (node.getAttribute("src") || node.getAttribute("href") || "").trim();
+
+            if (!url || /^(data:|blob:|#|javascript:|about:)/i.test(url)) {
+              return;
+            }
+
+            if (/^\/(?:content\/|r\/|blockheight|blockhash|blocktime)/.test(url) || url.indexOf(ORDINALS_ORIGIN + "/") === 0) {
+              return;
+            }
+
+            if (/^(?:[a-z][a-z0-9+.-]*:)?\/\//i.test(url)) {
+              external.push(url);
+            } else {
+              local.push(url);
+            }
+          });
+        } catch (error) {}
+
+        return { local: local, external: external };
       }
 
-      function redirectWithPayload(payload) {
-        var encoded = JSON.stringify(payload);
-        var size = bytes(encoded);
+      function describeBuildWarnings(html) {
+        var refs = findUnloadableReferences(html);
+        var notes = [];
 
-        window.name = encoded;
-
-        setStatus(
-          "Payload ready: " +
-          size.toLocaleString() +
-          " bytes. Redirecting to ordinals.com..."
-        );
-
-        window.location.href = RECEIVER_URL + "#ordinal-window-loader";
-      }
-
-      function iframeWalletBridgeScript() {
-        var availability = getParentWalletAvailability();
-
-        return [
-          "<script>",
-          "(function(){",
-          "if(window.__ordinalParentWalletBridgeInstalled)return;",
-          "window.__ordinalParentWalletBridgeInstalled=true;",
-          "var available=",
-          JSON.stringify(availability),
-          ";",
-          "var REQ=",
-          JSON.stringify(WALLET_BRIDGE_REQUEST_TYPE),
-          ";var RES=",
-          JSON.stringify(WALLET_BRIDGE_RESPONSE_TYPE),
-          ";var EVT=",
-          JSON.stringify(WALLET_BRIDGE_EVENT_TYPE),
-          ";var pending={};var eventHandlers={};",
-          "function makeId(){return String(Date.now())+'-'+Math.random().toString(36).slice(2)}",
-          "function b64Json(value){var json=JSON.stringify(value);var encoded=btoa(unescape(encodeURIComponent(json)));return encoded.replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'')}",
-          "function tokenFromParams(params){return b64Json({typ:'JWT',alg:'none'})+'.'+b64Json(params||{})+'.'}",
-          "function sendParent(walletId,callType,method,params){return new Promise(function(resolve,reject){var id=makeId();var timer=setTimeout(function(){delete pending[id];reject(new Error('Parent wallet request timed out'))},120000);pending[id]={resolve:resolve,reject:reject,timer:timer};window.parent.postMessage({type:REQ,id:id,walletId:walletId,callType:callType,method:method,params:params},'*')})}",
-          "function defineGlobal(name,value){try{if(window[name]===undefined)Object.defineProperty(window,name,{configurable:true,enumerable:true,writable:true,value:value})}catch(e){try{if(window[name]===undefined)window[name]=value}catch(_){}}}",
-          "function createProxy(walletId,opts){opts=opts||{};var proxy;function parentMethod(method,args){return sendParent(walletId,'method',method,args)}function parentRequest(methodOrPayload,params){var method=methodOrPayload;if(methodOrPayload&&typeof methodOrPayload==='object'){method=methodOrPayload.method;params=methodOrPayload.params}if(opts.xverse&&(method==='getAddresses'||method==='wallet_connect'||method==='requestAccounts'||method==='getAccounts')){return parentMethod('connect',[tokenFromParams(params)])}return sendParent(walletId,'request',method,params)}function addHandler(name,handler){if(typeof handler!=='function')return proxy;var key=walletId+':'+name;if(!eventHandlers[key])eventHandlers[key]=[];eventHandlers[key].push(handler);sendParent(walletId,'event-subscribe','on',{eventName:name}).catch(function(){});return proxy}function removeHandler(name,handler){var key=walletId+':'+name;var list=eventHandlers[key]||[];eventHandlers[key]=handler?list.filter(function(fn){return fn!==handler}):[];if(!eventHandlers[key].length)sendParent(walletId,'event-unsubscribe','off',{eventName:name}).catch(function(){});return proxy}proxy={isOrdinalParentBridge:true,request:parentRequest,on:addHandler,addListener:addHandler,off:removeHandler,removeListener:removeHandler};if(opts.xverse)proxy.isXverse=true;proxy.getAddresses=function(params){return parentRequest('getAddresses',params)};proxy.connect=function(){return parentMethod('connect',Array.prototype.slice.call(arguments))};['requestAccounts','getAccounts','getPublicKey','getBalance','getNetwork','switchNetwork','getChain','switchChain','signMessage','multiSignMessage','signPsbt','signPsbts','pushPsbt','pushTx','sendBitcoin','sendInscription','getInscriptions','getAllInscriptions','inscribe','mint','sendTransfer','sendOrdinal','createInscription','createRepeatInscriptions','signTransaction','ord_getInscriptions','ord_sendInscriptions','runes_getBalance','runes_transfer','runes_mint','runes_etch','runes_getOrder'].forEach(function(name){if(!proxy[name])proxy[name]=function(){return parentMethod(name,Array.prototype.slice.call(arguments))}});proxy.signMultipleTransactions=function(request){var payload=request&&request.payload!==undefined?request.payload:request;return parentMethod('signMultipleTransactions',[{payload:payload}]).then(function(response){if(request&&typeof request.onFinish==='function')request.onFinish(response);return response},function(error){if(request&&typeof request.onCancel==='function'&&/cancel|reject|denied/i.test(error&&error.message||''))request.onCancel();throw error})};return proxy}",
-          "function emitEvent(walletId,name,args){var key=walletId+':'+name;var list=(eventHandlers[key]||[]).slice();for(var i=0;i<list.length;i+=1){try{list[i].apply(null,args||[])}catch(e){setTimeout(function(){throw e},0)}}}",
-          "window.addEventListener('message',function(event){var data=event.data;if(!data)return;if(data.type===EVT){emitEvent(data.walletId||'xverse',data.eventName,data.args);return}if(data.type!==RES||!pending[data.id])return;var slot=pending[data.id];clearTimeout(slot.timer);delete pending[data.id];if(data.ok){slot.resolve(data.result)}else{slot.reject(new Error(data.error||'Parent wallet request failed'))}});",
-          "if(available.xverse){var xverse=createProxy('xverse',{xverse:true});defineGlobal('BitcoinProvider',xverse);try{window.XverseProviders=window.XverseProviders||{};if(!window.XverseProviders.BitcoinProvider)window.XverseProviders.BitcoinProvider=xverse}catch(e){}try{if(!Array.isArray(window.btc_providers))window.btc_providers=[];var found=window.btc_providers.some(function(entry){return String((entry&&(entry.name||entry.id||entry.label))||'').toLowerCase().indexOf('xverse')!==-1});if(!found)window.btc_providers.push({id:'xverse-parent-bridge',name:'Xverse',provider:xverse,request:xverse.request})}catch(e){}}",
-          "if(available.unisat)defineGlobal('unisat',createProxy('unisat'));",
-          "if(available.okx){var okx=createProxy('okx');try{window.okxwallet=window.okxwallet||{};if(!window.okxwallet.bitcoin)window.okxwallet.bitcoin=okx}catch(e){defineGlobal('okxwallet',{bitcoin:okx})}}",
-          "if(available.leather){var leather=createProxy('leather');defineGlobal('LeatherProvider',leather);defineGlobal('HiroWalletProvider',leather)}",
-          "if(available.phantom){var phantom=createProxy('phantom');try{window.phantom=window.phantom||{};if(!window.phantom.bitcoin)window.phantom.bitcoin=phantom}catch(e){defineGlobal('phantom',{bitcoin:phantom})}}",
-          "if(available.wizz)defineGlobal('wizz',createProxy('wizz'));",
-          "if(available.oyl)defineGlobal('oyl',createProxy('oyl'));",
-          "if(available.bitmapWallet)defineGlobal('bitmapWallet',createProxy('bitmapwallet'));",
-          "if(available.magicEden)defineGlobal('magicEden',createProxy('magiceden'));",
-          "})();",
-          "<\/script>"
-        ].join("");
-      }
-
-      function normalizeIframeHtml(html) {
-        var cleaned = String(html || "").trim();
-
-        if (!cleaned) {
-          throw new Error("Empty HTML payload.");
+        function sample(list) {
+          return list.slice(0, 3).join(", ") + (list.length > 3 ? ", ..." : "");
         }
 
-        cleaned = cleaned.replace(/<base\b[^>]*>/gi, "");
-  cleaned = rewriteOrdinalRootUrls(cleaned);
-
-        var script = iframeWalletBridgeScript();
-        var base = ordinalBaseTag();
-
-        if (/<head[\s>]/i.test(cleaned)) {
-          return cleaned.replace(/<head([^>]*)>/i, "<head$1>" + base + script);
+        if (refs.local.length) {
+          notes.push("Heads-up: " + refs.local.length + " local file reference(s) will not load on ordinals.com (" + sample(refs.local) + "). Inline them or load them from /content/.");
         }
 
-        if (/<html[\s>]/i.test(cleaned)) {
-          return cleaned.replace(/<html([^>]*)>/i, "<html$1><head>" + base + script + "</head>");
+        if (refs.external.length) {
+          notes.push("Heads-up: " + refs.external.length + " external URL(s) are blocked by the ordinals.com content security policy (" + sample(refs.external) + ").");
+        }
+
+        return notes.join("\n");
+      }
+
+      function injectIntoHead(html, injection) {
+        var headOpen = /<head(?:\s[^>]*)?>/i;
+        var htmlOpen = /<html(?:\s[^>]*)?>/i;
+        var doctype = /^\s*<!doctype[^>]*>/i;
+
+        if (headOpen.test(html)) {
+          return html.replace(headOpen, function (match) {
+            return match + injection;
+          });
+        }
+
+        if (htmlOpen.test(html)) {
+          return html.replace(htmlOpen, function (match) {
+            return match + "<head>" + injection + "</head>";
+          });
+        }
+
+        if (doctype.test(html)) {
+          return html.replace(doctype, function (match) {
+            return match + injection;
+          });
         }
 
         return [
@@ -811,89 +1668,609 @@
           "<head>",
           '<meta charset="UTF-8">',
           '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
-          base,
-          script,
+          injection,
           "</head>",
           "<body>",
-          cleaned,
+          html,
           "</body>",
           "</html>"
         ].join("");
       }
 
-      function launchPayloadInRelayFrame(payload) {
-        payload.relayId = payload.relayId || makeRelayId();
-
-        if (relayFrame && relayFrame.parentNode) {
-          relayFrame.parentNode.removeChild(relayFrame);
-        }
-
-        if (relayFrameObjectUrl) {
-          URL.revokeObjectURL(relayFrameObjectUrl);
-          relayFrameObjectUrl = null;
-        }
-
-        relayFrame = document.createElement("iframe");
-        relayFrame.title = "Ordinal iframe bridge receiver";
-        relayFrame.style.position = "fixed";
-        relayFrame.style.inset = "0";
-        relayFrame.style.width = "100vw";
-        relayFrame.style.height = "100vh";
-        relayFrame.style.opacity = "1";
-        relayFrame.style.pointerEvents = "auto";
-        relayFrame.style.border = "0";
-        relayFrame.style.background = "#050505";
-        relayFrame.style.zIndex = "2147483647";
-        relayFrame.name = "ordinal-iframe-bridge-" + payload.relayId;
-
-        document.body.appendChild(relayFrame);
-        relayFrameObjectUrl = URL.createObjectURL(new Blob([normalizeIframeHtml(payload.html)], {
-          type: "text/html"
-        }));
-        relayFrame.src = relayFrameObjectUrl;
-
-        setStatus("Build launched in iframe bridge. Wallet calls will be posted to this parent window.");
-        setBusy(false);
+      /* Local preview only: point root-relative recursion URLs at ordinals.com. */
+      function rewriteOrdinalRootUrls(text) {
+        return String(text || "").replace(
+          /(["'`(=]\s*)(\/(?:r\/|content\/|blockheight(?=[/?#"'`)\s]|$)|blockhash(?=[/?#"'`)\s]|$)|blocktime(?=[/?#"'`)\s]|$)))/g,
+          function (_match, prefix, pathStart) {
+            return prefix + ORDINALS_ORIGIN + pathStart;
+          }
+        );
       }
 
-      async function handleParentWalletBridgeRequest(event) {
-        var data = event.data;
+      function ordCspMetaTag() {
+        var o = ORDINALS_ORIGIN;
+        var sources = [o + "/content/", o + "/blockheight", o + "/blockhash", o + "/blockhash/", o + "/blocktime", o + "/r/"];
 
-        if (!data || data.type !== WALLET_BRIDGE_REQUEST_TYPE || !data.id) {
-          return;
-        }
+        return '<meta http-equiv="Content-Security-Policy" content="default-src ' + sources.join(" ") +
+          " 'unsafe-eval' 'unsafe-inline' data: blob:\">";
+      }
 
-        if (!(event.origin === window.location.origin || event.origin === "null" || (relayFrame && event.source === relayFrame.contentWindow))) {
-          return;
+      /*
+        Runs on ordinals.com as the first thing the receiver renders, and takes
+        over rendering the real build. It exists because the launcher cannot know
+        how a given receiver writes the page, and the two common ways behave very
+        differently:
+
+        - A receiver that writes while its own page is still being parsed. Nothing
+          is reset, so a natively injected wallet keeps working. The build is
+          written straight into that same parse, after removing whatever the
+          receiver left in the document (its own script, title, styles).
+
+        - A receiver that rebuilds the page after it loaded (document.open). By
+          then every window listener is gone, including the wallet extension's,
+          and a build written at that moment can stall on its first external
+          script. So: wait for the page to settle, render the build into a clean
+          document, and connect the wallet through the launcher instead.
+
+        Frame mode always bridges the wallet, so there it also takes the clean
+        document whenever the receiver has left anything behind.
+
+        Serialised with toString(): must not reference anything outside itself.
+      */
+      function receiverBootstrap(cfg, inject) {
+        var ownScript = document.currentScript;
+        var navigation = null;
+
+        if (ownScript && ownScript.parentNode) {
+          ownScript.parentNode.removeChild(ownScript);
         }
 
         try {
-          var result;
-          if (data.callType === "event-subscribe") {
-            result = await subscribeWalletProviderEvent(event.source, event.origin, data.params && data.params.eventName, data.walletId);
-          } else if (data.callType === "event-unsubscribe") {
-            result = await unsubscribeWalletProviderEvent(event.source, data.params && data.params.eventName, data.walletId);
-          } else {
-            result = await requestWalletProvider(data.method, data.params, data.callType, data.walletId);
+          navigation = performance.getEntriesByType("navigation")[0] || null;
+        } catch (error) {}
+
+        var firstParse = document.readyState === "loading" && !(navigation && navigation.domInteractive > 0);
+        var leftovers = [];
+
+        /*
+          This tab was handed over by the launcher itself, so there is no launcher
+          page left to reach the wallet through, and the receiver has reset the
+          page. Go back and let the launcher run the build in its frame instead.
+        */
+        if (!firstParse && cfg.returnUrl) {
+          window.location.replace(cfg.returnUrl);
+          return;
+        }
+
+        if (firstParse) {
+          Array.prototype.forEach.call(
+            document.querySelectorAll("title, meta, base, style, link[rel~=stylesheet], script"),
+            function (node) {
+              var src = node.getAttribute("src") || "";
+
+              /* Leave anything a browser extension put there. */
+              if (!/^[a-z-]+-extension:/i.test(src)) {
+                leftovers.push(node);
+              }
+            }
+          );
+        }
+
+        /*
+          A wallet that injected itself into this very document and locked its
+          globals cannot be swapped for the bridge, and resetting the page would
+          cut it off. In that case keep the page as it is.
+        */
+        var lockedNativeWallet = (cfg.walletRoots || []).some(function (name) {
+          var descriptor = Object.getOwnPropertyDescriptor(window, name);
+          return !!descriptor && !descriptor.configurable;
+        });
+
+        var clean = !leftovers.length && !document.body;
+        var writeNow = firstParse && (clean || cfg.bridge !== "always" || lockedNativeWallet);
+        var html = cfg.bridge === "always" || !writeNow ? inject(cfg.html, cfg.shim) : cfg.html;
+
+        if (writeNow) {
+          leftovers.forEach(function (node) {
+            if (node.parentNode) {
+              node.parentNode.removeChild(node);
+            }
+          });
+
+          document.write(html);
+          return;
+        }
+
+        (function settle() {
+          if (document.readyState !== "complete") {
+            setTimeout(settle, 20);
+            return;
           }
 
-          if (event.source && typeof event.source.postMessage === "function") {
-            event.source.postMessage({
-              type: WALLET_BRIDGE_RESPONSE_TYPE,
-              id: data.id,
-              ok: true,
-              result: result
-            }, getBridgePostTargetOrigin(event.origin));
+          setTimeout(function () {
+            document.open();
+            document.write(html);
+            document.close();
+          }, 30);
+        })();
+      }
+
+      /* bridge: "always" (frame) or "if-reset" (tab: only when the native wallet has been cut off). */
+      function htmlForReceiver(html, s, bridge, returnUrl) {
+        var cfg = { html: html, shim: bridgeScriptTag(s), bridge: bridge, walletRoots: WALLET_ROOTS, returnUrl: returnUrl || null };
+
+        return "<!DOCTYPE html><script>(" + receiverBootstrap.toString() + ")(" + inlineJson(cfg) + "," + injectIntoHead.toString() + ");<\/script>";
+      }
+
+      function htmlForLocal(html, s) {
+        var cleaned = rewriteOrdinalRootUrls(html.replace(/<base\b[^>]*>/gi, ""));
+        var injection = '<base href="' + ORDINALS_ORIGIN + '/">' +
+          (LOCAL_EMULATES_ORD_CSP ? ordCspMetaTag() : "") +
+          bridgeScriptTag(s);
+
+        return injectIntoHead(cleaned, injection);
+      }
+
+      function makePayload(html, token, source) {
+        return {
+          type: PAYLOAD_TYPE,
+          version: "1.0.0",
+          relayId: token,
+          html: html,
+          source: window.location.href,
+          buildUrl: source.buildUrl || "manual-paste",
+          receiver: RECEIVER_URL,
+          createdAt: new Date().toISOString()
+        };
+      }
+
+      /* ================================================================
+         RECEIVER
+         ================================================================ */
+
+      function probeReceiver() {
+        receiverProbe = fetch(cacheBust(RECEIVER_URL), { cache: "no-store" }).then(function (response) {
+          if (!response.ok) {
+            /* ordinals.com answered, and there is no inscription to load. */
+            receiverInfo = { state: "missing", reason: "HTTP " + response.status };
+            return null;
           }
-        } catch (error) {
-          if (event.source && typeof event.source.postMessage === "function") {
-            event.source.postMessage({
-              type: WALLET_BRIDGE_RESPONSE_TYPE,
-              id: data.id,
-              ok: false,
-              error: error && error.message ? error.message : String(error)
-            }, getBridgePostTargetOrigin(event.origin));
+
+          return response.text().then(function (text) {
+            receiverInfo = {
+              state: text.indexOf(RECEIVER_V2_MARKER) !== -1 ? "v2" : "legacy",
+              usesDocumentOpen: /document\s*\.\s*open\s*\(/.test(text)
+            };
+          });
+        }).catch(function (error) {
+          receiverInfo = { state: "unreachable", reason: error && error.message ? error.message : String(error) };
+        }).then(showReceiverLine);
+
+        return receiverProbe;
+      }
+
+      /* The result of the receiver check, without ever waiting long for it. */
+      function receiverState(maxMs) {
+        return Promise.race([
+          receiverProbe || Promise.resolve(),
+          new Promise(function (resolve) {
+            setTimeout(resolve, maxMs);
+          })
+        ]).then(function () {
+          return receiverInfo.state;
+        });
+      }
+
+      function showReceiverLine() {
+        var text;
+        var tone = "good";
+
+        if (receiverInfo.state === "v2") {
+          text = "Receiver on sat " + RECEIVER_SAT + ": upgraded receiver detected.";
+        } else if (receiverInfo.state === "legacy") {
+          text = "Receiver on sat " + RECEIVER_SAT + ": reachable.";
+
+          if (receiverInfo.usesDocumentOpen) {
+            tone = "warn";
+            text += " Its code calls document.open(). If that runs after the page has loaded, the wallet injected in an ordinals.com tab is cut off and tab mode bridges the wallet through this page instead. Frame mode is not affected.";
           }
+        } else if (receiverInfo.state === "missing") {
+          tone = "warn";
+          text = "No inscription could be loaded from sat " + RECEIVER_SAT + " (" + receiverInfo.reason + "). Builds run in local preview until it is there.";
+        } else if (receiverInfo.state === "unreachable") {
+          tone = "warn";
+          text = "Receiver on sat " + RECEIVER_SAT + " could not be checked from this page (" + receiverInfo.reason + "). Frame mode drops to local preview if it does not render.";
+        } else {
+          receiverLine.textContent = "";
+          return;
+        }
+
+        receiverLine.innerHTML = '<span class="' + tone + '">●</span> ';
+        receiverLine.appendChild(document.createTextNode(text));
+      }
+
+      /* Compressed copy of the payload for the URL fragment (upgraded receiver only). */
+      async function packForHash(payload) {
+        if (typeof CompressionStream === "undefined") {
+          return null;
+        }
+
+        var raw = new TextEncoder().encode(JSON.stringify(payload));
+        var stream = new Blob([raw]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+        var packed = new Uint8Array(await new Response(stream).arrayBuffer());
+        var binary = "";
+
+        for (var i = 0; i < packed.length; i += 0x8000) {
+          binary += String.fromCharCode.apply(null, packed.subarray(i, i + 0x8000));
+        }
+
+        return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      }
+
+      /* ================================================================
+         SESSIONS
+         ================================================================ */
+
+      function newSession(mode, source) {
+        if (mode === "tab") {
+          /* Forget tabs that have been closed. */
+          Object.keys(sessions).forEach(function (token) {
+            var old = sessions[token];
+
+            if (old.tab && old.tab.closed) {
+              old.closed = true;
+              delete sessions[token];
+            }
+          });
+        } else {
+          endSession();
+        }
+
+        var s = {
+          token: makeToken(),
+          mode: mode,
+          source: source,          /* { html, buildUrl } - buildUrl is absent for pasted HTML */
+          payload: null,
+          frame: null,
+          tab: null,
+          blobUrl: null,
+          child: null,
+          childOrigin: null,
+          helloSeen: false,
+          closed: false,
+          pending: {},
+          seq: 0,
+          timers: []
+        };
+
+        s.codec = makeBridgeCodec(function (fnId, encodedArgs) {
+          if (s.closed || !s.child) {
+            return Promise.resolve(undefined);
+          }
+
+          return new Promise(function (resolve, reject) {
+            s.seq += 1;
+            var id = "p" + s.seq;
+            s.pending[id] = { resolve: resolve, reject: reject };
+            sendToChild(s, { kind: "invoke", id: id, fn: fnId, args: encodedArgs });
+          });
+        });
+
+        sessions[s.token] = s;
+
+        if (mode !== "tab") {
+          session = s;
+        }
+
+        return s;
+      }
+
+      function clearWatchdog(s) {
+        s.timers.forEach(clearTimeout);
+        s.timers = [];
+      }
+
+      function endSession() {
+        var s = session;
+
+        if (!s) {
+          return;
+        }
+
+        s.closed = true;
+        clearWatchdog(s);
+
+        if (s.frame && s.frame.parentNode) {
+          s.frame.parentNode.removeChild(s.frame);
+        }
+
+        if (s.blobUrl) {
+          URL.revokeObjectURL(s.blobUrl);
+        }
+
+        delete sessions[s.token];
+        session = null;
+        document.body.classList.remove("staged");
+        hud.hidden = true;
+        hud.classList.remove("open");
+      }
+
+      function createStage() {
+        var frame = document.createElement("iframe");
+
+        frame.id = "stage";
+        frame.title = "Ordinal build";
+        frame.setAttribute("allowfullscreen", "");
+        frame.setAttribute("allow", [
+          "accelerometer", "autoplay", "camera", "clipboard-read", "clipboard-write",
+          "display-capture", "encrypted-media", "fullscreen", "gamepad", "gyroscope",
+          "magnetometer", "microphone", "midi", "picture-in-picture", "screen-wake-lock",
+          "web-share", "xr-spatial-tracking"
+        ].join("; "));
+
+        frame.addEventListener("load", function () {
+          try {
+            frame.focus();
+          } catch (error) {}
+        });
+
+        return frame;
+      }
+
+      function showStage(s, label) {
+        document.body.classList.add("staged");
+        hud.hidden = false;
+        hudLabel.textContent = label;
+        setHudState(s.helloSeen ? "ok" : "wait");
+      }
+
+      function setHudState(state) {
+        hud.setAttribute("data-state", state);
+      }
+
+      /* ================================================================
+         LAUNCH: ordinals.com frame
+         ================================================================ */
+
+      function launchFrame(source) {
+        var s = newSession("frame", source);
+        var frame = createStage();
+
+        s.payload = makePayload(htmlForReceiver(source.html, s, "always"), s.token, source);
+        s.frame = frame;
+
+        /*
+          The payload rides in the frame's window.name, which is what the receiver
+          reads. A nested frame keeps its name across the hop to ordinals.com in
+          every browser; a top-level redirect no longer reliably does.
+        */
+        var encoded = JSON.stringify(s.payload);
+
+        frame.name = encoded;
+        frame.src = RECEIVER_URL + "#ordinal-window-loader";
+
+        frame.addEventListener("load", function () {
+          if (s.closed || s.helloSeen) {
+            return;
+          }
+
+          s.timers.push(setTimeout(function () {
+            receiverDidNotRender(s, "The receiver on ordinals.com loaded but did not render the build");
+          }, RECEIVER_RENDER_TIMEOUT_MS));
+        });
+
+        s.timers.push(setTimeout(function () {
+          receiverDidNotRender(s, "ordinals.com did not answer in time");
+        }, RECEIVER_LOAD_TIMEOUT_MS));
+
+        document.body.appendChild(frame);
+
+        showStage(s, MODE_NAMES.frame);
+        setStatus("Build running in an ordinals.com frame (" + bytes(encoded).toLocaleString() + " bytes). Wallet calls go to the wallet on this page.");
+        return s;
+      }
+
+      function receiverDidNotRender(s, reason) {
+        if (s.closed || s.helloSeen || session !== s) {
+          return;
+        }
+
+        if (FALL_BACK_TO_LOCAL) {
+          var fallback = launchLocal(s.source);
+          fallback.retryMode = "frame";
+          hudLabel.textContent = MODE_NAMES.local + " (receiver did not respond)";
+          setStatus(reason + ". Fell back to local preview.", true);
+          return fallback;
+        }
+
+        setHudState("error");
+        setStatus(reason + ".", true);
+      }
+
+      /* ================================================================
+         LAUNCH: local preview
+         ================================================================ */
+
+      function launchLocal(source) {
+        var s = newSession("local", source);
+        var frame = createStage();
+        var html = htmlForLocal(source.html, s);
+
+        s.frame = frame;
+        s.blobUrl = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+
+        document.body.appendChild(frame);
+        frame.src = s.blobUrl;
+
+        showStage(s, MODE_NAMES.local);
+        setStatus("Build running in local preview (" + bytes(html).toLocaleString() + " bytes). Wallet calls go to the wallet on this page.");
+        return s;
+      }
+
+      /* ================================================================
+         LAUNCH: ordinals.com tab (top-level, native wallet)
+         ================================================================ */
+
+      /*
+        Opens an empty tab during the click itself, so the browser never treats
+        the real navigation (which happens after the build is fetched) as a pop-up.
+      */
+      function preopenTab() {
+        var tab = null;
+
+        try {
+          tab = window.open("", "_blank");
+
+          if (tab) {
+            tab.document.title = "Loading build...";
+            tab.document.body.style.cssText = "margin:0;background:#050505;color:#aaa;font:14px Arial,sans-serif;padding:24px";
+            tab.document.body.textContent = "Loading build...";
+          }
+        } catch (error) {}
+
+        return tab;
+      }
+
+      async function launchTab(source, options) {
+        var auto = !!(options && options.auto);
+        var tab = (options && options.preopened) || null;
+        var s = newSession("tab", source);
+
+        /*
+          The build is written as-is and uses the wallet that injects itself on
+          ordinals.com. The bridge is only switched on if the receiver has
+          already cut that wallet off (see receiverBootstrap).
+        */
+        s.payload = makePayload(htmlForReceiver(source.html, s, "if-reset"), s.token, source);
+
+        var encoded = JSON.stringify(s.payload);
+        var url = RECEIVER_URL + "#ordinal-window-loader";
+
+        /*
+          A window that has an opener keeps its name on the way to ordinals.com,
+          so the receiver finds the payload in window.name exactly as before.
+        */
+        if (tab && !tab.closed) {
+          try {
+            tab.name = encoded;
+            tab.location.replace(url);
+          } catch (error) {
+            tab = null;
+          }
+        } else if (!auto) {
+          try {
+            tab = window.open(url, encoded);
+          } catch (error) {
+            tab = null;
+          }
+        }
+
+        if (tab) {
+          s.tab = tab;
+          setStatus("Build opened in a new ordinals.com tab (" + bytes(encoded).toLocaleString() + " bytes). It uses the wallet injected in that tab.");
+          return true;
+        }
+
+        /*
+          No click, or the pop-up was blocked: hand this tab itself over to
+          ordinals.com, the way the first launcher did.
+        */
+        s.closed = true;
+        delete sessions[s.token];
+
+        try {
+          window.sessionStorage.setItem(HANDOFF_KEY, String(Date.now()));
+        } catch (error) {}
+
+        setStatus("Opening ordinals.com in this tab...");
+
+        /* If the receiver turns out to reset the page, the build comes back here to run in the frame. */
+        var back = new URL(window.location.href);
+
+        back.hash = "";
+        back.searchParams.set("mode", "frame");
+        back.searchParams.set("handoff", "reset");
+
+        s.payload = makePayload(htmlForReceiver(source.html, s, "if-reset", back.href), s.token, source);
+        encoded = JSON.stringify(s.payload);
+
+        /* The upgraded receiver takes the build in the address, which no browser strips. */
+        if ((await receiverState(3000)) === "v2") {
+          var packed = await packForHash(s.payload);
+          var target = RECEIVER_URL + "#z=" + packed;
+
+          if (packed && target.length <= MAX_HASH_URL_LENGTH) {
+            window.location.href = target;
+            return true;
+          }
+        }
+
+        /*
+          Otherwise the build rides in this tab's window.name. Chrome empties
+          window.name when a cross-site navigation moves the tab into a new
+          browsing-context group, which it does in order to keep the page being
+          left ready for the Back button. A page with an unload listener, or one
+          whose history entry is being replaced, is not kept, so the tab and its
+          name carry straight on to ordinals.com. (Tested in Chrome 153: either
+          one alone is enough; both are used.) The extra history entry is what
+          the replace consumes, so Back still returns here.
+        */
+        window.name = encoded;
+        window.addEventListener("unload", function () {});
+
+        try {
+          window.history.pushState(null, "", window.location.href);
+        } catch (error) {}
+
+        window.location.replace(url);
+        return true;
+      }
+
+      /* ================================================================
+         LAUNCH: entry points
+         ================================================================ */
+
+      async function launch(source, options) {
+        var mode = (options && options.mode) || currentMode();
+
+        /* A receiver that was not there a moment ago may be there now: look again. */
+        if (receiverInfo.state === "missing" || receiverInfo.state === "unreachable") {
+          probeReceiver();
+        }
+
+        /* Use ordinals.com only when the receiver inscription is actually there to load. */
+        if (mode !== "local" && (await receiverState(3000)) === "missing") {
+          if (options && options.preopened) {
+            options.preopened.close();
+          }
+
+          await waitForWalletInjection(recall(WALLET_SEEN_KEY) ? 3000 : 900);
+          refreshWallets();
+
+          var fallback = launchLocal(source);
+
+          fallback.retryMode = "frame";
+          hudLabel.textContent = MODE_NAMES.local + " (no receiver inscription)";
+          setStatus("No inscription could be loaded from sat " + RECEIVER_SAT + " (" + receiverInfo.reason + "). Fell back to local preview.", true);
+          return fallback;
+        }
+
+        if (mode === "tab") {
+          return launchTab(source, options);
+        }
+
+        /* Give the extension a moment to inject so the build sees the wallet from its first line. */
+        await waitForWalletInjection(recall(WALLET_SEEN_KEY) ? 3000 : 900);
+        refreshWallets();
+
+        return mode === "local" ? launchLocal(source) : launchFrame(source);
+      }
+
+      function appendWarnings(html) {
+        var warnings = describeBuildWarnings(html);
+
+        if (warnings) {
+          setStatus(statusEl.textContent + "\n" + warnings, statusEl.className === "error");
         }
       }
 
@@ -909,6 +2286,7 @@
             " bytes at " +
             build.buildUrl
           );
+          appendWarnings(build.html);
         } catch (error) {
           console.error(error);
           setStatus(error.message || String(error), true);
@@ -918,38 +2296,39 @@
       }
 
       async function launchBuild() {
+        var preopened = currentMode() === "tab" ? preopenTab() : null;
+
         try {
           setBusy(true);
 
           var build = await fetchBuildHtml();
-          await waitForWalletInjection(2500);
 
-          launchPayloadInRelayFrame(
-            makePayload(build.html, {
-              buildUrl: build.buildUrl,
-              relayId: makeRelayId()
-            })
-          );
+          await launch({ html: build.html, buildUrl: build.buildUrl }, { preopened: preopened });
+          appendWarnings(build.html);
         } catch (error) {
           console.error(error);
+
+          if (preopened) {
+            preopened.close();
+          }
+
           setStatus(error.message || String(error), true);
+        } finally {
           setBusy(false);
         }
       }
 
-      async function launchBuildInFrame() {
+      async function launchPastedHtml() {
         try {
+          var html = manualHtml.value.trim();
+
+          if (!html) {
+            throw new Error("Paste some HTML first.");
+          }
+
           setBusy(true);
-
-          var build = await fetchBuildHtml();
-          await waitForWalletInjection(2500);
-
-          launchPayloadInRelayFrame(
-            makePayload(build.html, {
-              buildUrl: build.buildUrl,
-              relayId: makeRelayId()
-            })
-          );
+          await launch({ html: html }, { preopened: currentMode() === "tab" ? preopenTab() : null });
+          appendWarnings(html);
         } catch (error) {
           console.error(error);
           setStatus(error.message || String(error), true);
@@ -958,96 +2337,181 @@
         }
       }
 
-      function launchPastedHtml() {
+      function backMessage() {
+        var handedOff = false;
+
         try {
-          var html = manualHtml.value.trim();
+          handedOff = !!window.sessionStorage.getItem(HANDOFF_KEY);
+          window.sessionStorage.removeItem(HANDOFF_KEY);
+        } catch (error) {}
 
-          if (!html) {
-            throw new Error("Paste some HTML first.");
-          }
-
-          redirectWithPayload(
-            makePayload(html, {
-              buildUrl: "manual-paste"
-            })
-          );
-        } catch (error) {
-          console.error(error);
-          setStatus(error.message || String(error), true);
-        }
-      }
-
-      async function launchPastedHtmlInFrame() {
-        try {
-          var html = manualHtml.value.trim();
-
-          if (!html) {
-            throw new Error("Paste some HTML first.");
-          }
-
-          await waitForWalletInjection(2500);
-
-          launchPayloadInRelayFrame(
-            makePayload(html, {
-              buildUrl: "manual-paste",
-              relayId: makeRelayId()
-            })
-          );
-        } catch (error) {
-          console.error(error);
-          setStatus(error.message || String(error), true);
-        }
+        return handedOff
+          ? "Back from ordinals.com. If the build did not appear there, this browser dropped the hand-off: press Launch build to open it in a new tab, or choose the ordinals.com frame."
+          : "Ready. Press Launch build to run it again.";
       }
 
       async function autoLaunchIfBuildExists() {
-        if (!AUTO_LAUNCH_IF_BUILD_EXISTS) {
-          setStatus("Ready. Auto-launch is disabled.");
+        var params = new URLSearchParams(window.location.search);
+        var navigation = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+        var cameBack = navigation && navigation.type === "back_forward";
+
+        if (!AUTO_LAUNCH_IF_BUILD_EXISTS || params.has("manual") || cameBack) {
+          setStatus(cameBack ? backMessage() : "Ready. Auto-launch is off.");
+          return;
+        }
+
+        var build;
+
+        try {
+          setBusy(true);
+          build = await fetchBuildHtml({ silent: true });
+        } catch (error) {
+          console.warn(error);
+          setStatus("No /build/index.html found yet. Add one, then reload this page or press Launch build.");
+          setBusy(false);
           return;
         }
 
         try {
-          setBusy(true);
+          setStatus("Build found. Launching " + bytes(build.html).toLocaleString() + " bytes...");
+          await launch({ html: build.html, buildUrl: build.buildUrl }, { auto: true });
 
-          var build = await fetchBuildHtml({
-            silent: true
-          });
-          await waitForWalletInjection(2500);
+          if (cameBackFromReset && session && session.mode === "frame") {
+            hudLabel.textContent = MODE_NAMES.frame + " (receiver resets the page)";
+            setStatus(
+              "The receiver rebuilds the page after it has loaded (document.open). On a top-level ordinals.com page that " +
+              "leaves the wallet cut off, so the build is running in the ordinals.com frame instead, and the frame is now " +
+              "the selected mode. The Launch button in tab mode, or Open as tab, still gives a top-level page with a working wallet."
+            );
+          }
 
-          setStatus(
-            "Build found. Auto-launching " +
-            bytes(build.html).toLocaleString() +
-            " bytes in iframe bridge..."
-          );
-
-          launchPayloadInRelayFrame(
-            makePayload(build.html, {
-              buildUrl: build.buildUrl,
-              relayId: makeRelayId()
-            })
-          );
+          appendWarnings(build.html);
         } catch (error) {
-          console.warn(error);
-          setStatus(
-            "No /build/index.html found yet. Add one, then reload this page or click Launch build now."
-          );
+          console.error(error);
+          setStatus(error.message || String(error), true);
+        } finally {
           setBusy(false);
         }
       }
 
-      launchBtn.addEventListener("click", launchBuild);
-      launchIframeBtn.addEventListener("click", launchBuildInFrame);
-      checkBtn.addEventListener("click", checkBuild);
-      launchManualBtn.addEventListener("click", launchPastedHtml);
-      launchManualIframeBtn.addEventListener("click", launchPastedHtmlInFrame);
-      window.addEventListener("message", handleParentWalletBridgeRequest);
+      /* ================================================================
+         HUD (the small handle over a running build)
+         ================================================================ */
 
-      clearNameBtn.addEventListener("click", function () {
-        window.name = "";
-        setStatus("window.name cleared.");
+      async function relaunchCurrent(mode) {
+        var s = session;
+
+        if (!s) {
+          return;
+        }
+
+        var source = s.source;
+        var preopened = mode === "tab" ? preopenTab() : null;
+
+        try {
+          if (source.buildUrl) {
+            var build = await fetchBuildHtml({ silent: true });
+            source = { html: build.html, buildUrl: build.buildUrl };
+          }
+
+          if (mode === "tab") {
+            /* The framed build keeps running; the tab is a second, top-level view of it. */
+            var opened = await launchTab(source, { preopened: preopened });
+
+            if (!opened) {
+              hudLabel.textContent = "Pop-up blocked";
+            }
+
+            return;
+          }
+
+          await launch(source, { mode: s.retryMode || s.mode });
+        } catch (error) {
+          console.error(error);
+
+          if (preopened) {
+            preopened.close();
+          }
+
+          endSession();
+          setStatus(error.message || String(error), true);
+        }
+      }
+
+      hud.addEventListener("click", function (event) {
+        var action = event.target && event.target.getAttribute && event.target.getAttribute("data-act");
+
+        if (event.target === hudDot) {
+          hud.classList.toggle("open");
+          return;
+        }
+
+        if (action === "reload") {
+          relaunchCurrent();
+        } else if (action === "tab") {
+          relaunchCurrent("tab");
+        } else if (action === "close") {
+          endSession();
+          setStatus("Closed. Press Launch build to run it again.");
+        }
       });
 
+      /* ================================================================
+         START
+         ================================================================ */
+
+      /* A payload left in this tab's own name by an older launcher is just dead weight. */
+      try {
+        if (window.name && window.name.indexOf(PAYLOAD_TYPE) !== -1) {
+          window.name = "";
+        }
+      } catch (error) {}
+
+      var cameBackFromReset = new URLSearchParams(window.location.search).get("handoff") === "reset";
+
+      selectMode(initialMode());
+      openReceiverLink.href = RECEIVER_URL;
+
+      if (cameBackFromReset) {
+        /* Stay on the frame from now on, and tidy the address. */
+        remember(MODE_KEY, "frame");
+
+        try {
+          window.sessionStorage.removeItem(HANDOFF_KEY);
+
+          var tidy = new URL(window.location.href);
+
+          tidy.searchParams.delete("handoff");
+          tidy.searchParams.delete("mode");
+          window.history.replaceState(null, "", tidy.href);
+        } catch (error) {}
+      }
+
+      Array.prototype.forEach.call(modeInputs, function (input) {
+        input.addEventListener("change", function () {
+          remember(MODE_KEY, currentMode());
+        });
+      });
+
+      launchBtn.addEventListener("click", function () {
+        launchBuild();
+      });
+
+      /* Coming back with the Back button can restore this page exactly as it was left. */
+      window.addEventListener("pageshow", function (event) {
+        if (event.persisted) {
+          setBusy(false);
+          setStatus(backMessage());
+        }
+      });
+      checkBtn.addEventListener("click", checkBuild);
+      launchManualBtn.addEventListener("click", launchPastedHtml);
+      window.addEventListener("message", handleMessage);
+
+      watchWallets();
+      probeReceiver();
       autoLaunchIfBuildExists();
     })();
   </script>
 </body>
-</html> 
+</html>
